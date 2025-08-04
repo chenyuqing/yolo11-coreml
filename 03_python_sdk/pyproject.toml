@@ -1,0 +1,29 @@
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "yolo11_coreml_sdk"
+version = "0.1.0"
+authors = [
+    {
+        name="Your Name",
+        email="you@example.com"
+    }
+]
+description = "A simple SDK for YOLOv11 CoreML inference."
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "ultralytics",
+    # Add other dependencies here
+]
+
+[project.urls]
+"Homepage" = "https://github.com/your-username/yolo11_coreml_sdk"

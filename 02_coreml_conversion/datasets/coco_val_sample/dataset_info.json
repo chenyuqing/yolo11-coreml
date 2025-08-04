@@ -1,0 +1,30 @@
+{
+  "name": "COCO Validation Sample",
+  "description": "COCO 2017 \u9a8c\u8bc1\u96c6\u7684\u7cbe\u9009\u6837\u672c\uff0c\u5305\u542b\u4e0d\u540c\u590d\u6742\u5ea6\u7684\u573a\u666f",
+  "images": 15,
+  "image_paths": [
+    "02_coreml_conversion/datasets/coco_val_sample/000000000139.jpg",
+    "02_coreml_conversion/datasets/coco_val_sample/000000000285.jpg",
+    "02_coreml_conversion/datasets/coco_val_sample/000000000632.jpg",
+    "02_coreml_conversion/datasets/coco_val_sample/000000000724.jpg",
+    "02_coreml_conversion/datasets/coco_val_sample/000000001268.jpg",
+    "02_coreml_conversion/datasets/coco_val_sample/000000001503.jpg",
+    "02_coreml_conversion/datasets/coco_val_sample/000000002299.jpg",
+    "02_coreml_conversion/datasets/coco_val_sample/000000002532.jpg",
+    "02_coreml_conversion/datasets/coco_val_sample/000000002685.jpg",
+    "02_coreml_conversion/datasets/coco_val_sample/000000003156.jpg",
+    "02_coreml_conversion/datasets/coco_val_sample/000000003501.jpg",
+    "02_coreml_conversion/datasets/coco_val_sample/000000004395.jpg",
+    "02_coreml_conversion/datasets/coco_val_sample/000000005193.jpg",
+    "02_coreml_conversion/datasets/coco_val_sample/000000005529.jpg",
+    "02_coreml_conversion/datasets/coco_val_sample/000000006040.jpg"
+  ],
+  "format": "coco",
+  "categories": "COCO 80 classes",
+  "complexity_levels": [
+    "simple",
+    "medium",
+    "complex"
+  ],
+  "source": "COCO 2017 validation set"
+}

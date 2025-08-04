@@ -23,7 +23,7 @@ class CoreMLConverter:
     def __init__(self):
         self.project_root = project_root
         self.models_dir = self.project_root / "shared_resources" / "models"
-        self.output_dir = Path("02_coreml_conversion") / "coreml_models"
+        self.output_dir = Path(__file__).parent / "coreml_models"
         self.output_dir.mkdir(exist_ok=True)
         
     def log(self, message, level="INFO"):
@@ -54,29 +54,52 @@ class CoreMLConverter:
         self.log("开始转换为 CoreML...")
         
         try:
-            # 基础转换
-            self.log("执行基础转换...")
+            # 先转换不带 NMS 的版本（用于精度测试）
+            self.log("1. 转换不带 NMS 的版本（用于精度测试）...")
+            model.export(
+                format='coreml',
+                optimize=True,
+                nms=False
+            )
+            
+            # 处理不带 NMS 的文件
+            model_name = pt_model_path.stem
+            mlpackage_name_no_nms = f"{model_name}.mlpackage"
+            source_path_no_nms = pt_model_path.parent / mlpackage_name_no_nms
+            
+            if source_path_no_nms.exists():
+                dest_path_no_nms = self.output_dir / f"{model_name}_no_nms.mlpackage"
+                if dest_path_no_nms.exists():
+                    shutil.rmtree(dest_path_no_nms)
+                shutil.move(str(source_path_no_nms), dest_path_no_nms)
+                self.log(f"✅ 无 NMS 版本转换完成: {dest_path_no_nms}")
+            
+            # 再转换带 NMS 的版本（用于部署）
+            self.log("2. 转换带 NMS 的版本（用于部署）...")
             model.export(
                 format='coreml',
                 optimize=True,
                 nms=True
             )
             
-            # 处理生成的文件
-            model_name = pt_model_path.stem
-            mlpackage_name = f"{model_name}.mlpackage"
+            # 处理带 NMS 的文件
+            mlpackage_name_with_nms = f"{model_name}.mlpackage"
+            source_path_with_nms = pt_model_path.parent / mlpackage_name_with_nms
             
-            if Path(mlpackage_name).exists():
-                # 移动到输出目录
-                dest_path = self.output_dir / mlpackage_name
-                if dest_path.exists():
-                    shutil.rmtree(dest_path)
-                shutil.move(mlpackage_name, dest_path)
-                
-                self.log(f"✅ 基础 CoreML 模型转换完成: {dest_path}")
-                return dest_path
+            if source_path_with_nms.exists():
+                dest_path_with_nms = self.output_dir / f"{model_name}_with_nms.mlpackage"
+                if dest_path_with_nms.exists():
+                    shutil.rmtree(dest_path_with_nms)
+                shutil.move(str(source_path_with_nms), dest_path_with_nms)
+                self.log(f"✅ 带 NMS 版本转换完成: {dest_path_with_nms}")
+            
+            # 返回不带 NMS 的版本用于验证和测试
+            no_nms_path = self.output_dir / f"{model_name}_no_nms.mlpackage"
+            if no_nms_path.exists():
+                self.log(f"✅ CoreML 模型转换完成，返回无 NMS 版本进行验证")
+                return no_nms_path
             else:
-                self.log(f"❌ 转换失败，未找到生成的模型: {mlpackage_name}", "ERROR")
+                self.log(f"❌ 转换失败，未找到无 NMS 模型", "ERROR")
                 return None
                 
         except Exception as e:
@@ -139,7 +162,7 @@ class CoreMLConverter:
                 self.log(f"   ✅ 推理成功，检测到 {detections} 个对象")
                 
                 # 保存验证结果
-                save_dir = Path("02_coreml_conversion") / "validation_results"
+                save_dir = Path(__file__).parent / "validation_results"
                 save_dir.mkdir(exist_ok=True)
                 
                 results = model.predict(
@@ -183,10 +206,13 @@ class CoreMLConverter:
             return "https://ultralytics.com/images/bus.jpg"
     
     def compare_models(self, pt_model, coreml_path):
-        """对比 PyTorch 和 CoreML 模型性能"""
+        """对比 PyTorch 和 CoreML 模型性能和精度"""
         self.log("对比 PyTorch 和 CoreML 模型...")
         
         test_image = self.get_test_image()
+        
+        # 性能对比
+        self.log("📊 性能对比测试...")
         
         # PyTorch 模型测试
         self.log("测试 PyTorch 模型性能...")
@@ -209,7 +235,7 @@ class CoreMLConverter:
         
         coreml_avg_time = np.mean(coreml_times)
         
-        # 输出对比结果
+        # 输出性能对比结果
         self.log("📊 性能对比结果:")
         self.log(f"   PyTorch 模型: {pt_avg_time:.3f}s ({1/pt_avg_time:.1f} FPS)")
         self.log(f"   CoreML 模型: {coreml_avg_time:.3f}s ({1/coreml_avg_time:.1f} FPS)")
@@ -220,6 +246,200 @@ class CoreMLConverter:
         else:
             degradation = (coreml_avg_time - pt_avg_time) / pt_avg_time * 100
             self.log(f"   ⚠️  CoreML 模型慢 {degradation:.1f}%")
+        
+        # 精度对比
+        self.log("🎯 精度对比测试...")
+        self.compare_accuracy(pt_model, coreml_model, test_image)
+    
+    def calculate_iou(self, box1, box2):
+        """计算两个边界框的IoU"""
+        x1 = max(box1[0], box2[0])
+        y1 = max(box1[1], box2[1]) 
+        x2 = min(box1[2], box2[2])
+        y2 = min(box1[3], box2[3])
+        
+        if x2 <= x1 or y2 <= y1:
+            return 0.0
+        
+        intersection = (x2 - x1) * (y2 - y1)
+        area1 = (box1[2] - box1[0]) * (box1[3] - box1[1])
+        area2 = (box2[2] - box2[0]) * (box2[3] - box2[1])
+        union = area1 + area2 - intersection
+        
+        return intersection / union if union > 0 else 0.0
+    
+    def match_detections_by_iou(self, pt_detections, cm_detections, iou_thresh=0.5):
+        """基于IoU匹配两个模型的检测结果"""
+        matches = []
+        used_cm_indices = set()
+        
+        for i, pt_det in enumerate(pt_detections):
+            best_iou = 0
+            best_match_idx = -1
+            
+            for j, cm_det in enumerate(cm_detections):
+                if j in used_cm_indices:
+                    continue
+                
+                # 只匹配相同类别
+                if pt_det['class_id'] != cm_det['class_id']:
+                    continue
+                
+                iou = self.calculate_iou(pt_det['bbox'], cm_det['bbox'])
+                if iou > best_iou and iou >= iou_thresh:
+                    best_iou = iou
+                    best_match_idx = j
+            
+            if best_match_idx != -1:
+                matches.append({
+                    'pt_idx': i,
+                    'cm_idx': best_match_idx,
+                    'iou': best_iou,
+                    'pt_det': pt_det,
+                    'cm_det': cm_detections[best_match_idx],
+                    'conf_diff': abs(pt_det['confidence'] - cm_detections[best_match_idx]['confidence']),
+                    'bbox_shift': self.calculate_bbox_shift(pt_det['bbox'], cm_detections[best_match_idx]['bbox'])
+                })
+                used_cm_indices.add(best_match_idx)
+        
+        # 未匹配的检测
+        unmatched_pt = [i for i in range(len(pt_detections)) if i not in [m['pt_idx'] for m in matches]]
+        unmatched_cm = [i for i in range(len(cm_detections)) if i not in used_cm_indices]
+        
+        return matches, unmatched_pt, unmatched_cm
+    
+    def calculate_bbox_shift(self, bbox1, bbox2):
+        """计算边界框的位置偏移"""
+        # 计算中心点偏移
+        center1 = [(bbox1[0] + bbox1[2]) / 2, (bbox1[1] + bbox1[3]) / 2]
+        center2 = [(bbox2[0] + bbox2[2]) / 2, (bbox2[1] + bbox2[3]) / 2]
+        
+        center_shift = np.sqrt((center1[0] - center2[0])**2 + (center1[1] - center2[1])**2)
+        
+        # 计算尺寸变化
+        size1 = [(bbox1[2] - bbox1[0]), (bbox1[3] - bbox1[1])]
+        size2 = [(bbox2[2] - bbox2[0]), (bbox2[3] - bbox2[1])]
+        
+        size_ratio = np.sqrt((size2[0] / size1[0])**2 + (size2[1] / size1[1])**2) if size1[0] > 0 and size1[1] > 0 else 1.0
+        
+        return {
+            'center_shift': center_shift,
+            'size_ratio': size_ratio
+        }
+
+    def compare_accuracy(self, pt_model, coreml_model, test_image):
+        """对比两个模型的检测精度 - 改进版本"""
+        try:
+            # 使用相同的置信度阈值进行推理
+            conf_threshold = 0.25
+            
+            # PyTorch 模型推理
+            pt_results = pt_model.predict(test_image, conf=conf_threshold, verbose=False)
+            pt_detections = []
+            if pt_results and pt_results[0].boxes is not None:
+                for box in pt_results[0].boxes:
+                    pt_detections.append({
+                        'class_id': int(box.cls.cpu().numpy()[0]),
+                        'class_name': pt_model.names[int(box.cls.cpu().numpy()[0])],
+                        'confidence': float(box.conf.cpu().numpy()[0]),
+                        'bbox': box.xyxy.cpu().numpy()[0].tolist()
+                    })
+            
+            # CoreML 模型推理
+            cm_results = coreml_model.predict(test_image, conf=conf_threshold, verbose=False)
+            cm_detections = []
+            if cm_results and cm_results[0].boxes is not None:
+                for box in cm_results[0].boxes:
+                    cm_detections.append({
+                        'class_id': int(box.cls.cpu().numpy()[0]),
+                        'class_name': coreml_model.names[int(box.cls.cpu().numpy()[0])],
+                        'confidence': float(box.conf.cpu().numpy()[0]),
+                        'bbox': box.xyxy.cpu().numpy()[0].tolist()
+                    })
+            
+            self.log(f"   PyTorch 检测数量: {len(pt_detections)}")
+            self.log(f"   CoreML 检测数量: {len(cm_detections)}")
+            
+            if len(pt_detections) == 0 and len(cm_detections) == 0:
+                self.log("   ✅ 两个模型都未检测到对象 - 结果一致")
+                return
+            
+            if len(pt_detections) == 0 or len(cm_detections) == 0:
+                self.log("   ⚠️  一个模型有检测，另一个没有 - 存在显著差异")
+                return
+            
+            # 基于IoU进行精确匹配
+            matches, unmatched_pt, unmatched_cm = self.match_detections_by_iou(pt_detections, cm_detections)
+            
+            self.log(f"   IoU匹配结果: {len(matches)}/{len(pt_detections)} 个检测被匹配")
+            
+            if len(matches) > 0:
+                # 分析匹配的检测质量
+                ious = [m['iou'] for m in matches]
+                conf_diffs = [m['conf_diff'] for m in matches] 
+                center_shifts = [m['bbox_shift']['center_shift'] for m in matches]
+                size_ratios = [m['bbox_shift']['size_ratio'] for m in matches]
+                
+                self.log(f"   平均 IoU: {np.mean(ious):.3f} (±{np.std(ious):.3f})")
+                self.log(f"   平均置信度差异: {np.mean(conf_diffs):.3f} (±{np.std(conf_diffs):.3f})")
+                self.log(f"   平均中心偏移: {np.mean(center_shifts):.1f} 像素")
+                self.log(f"   平均尺寸比例: {np.mean(size_ratios):.3f}")
+                
+                # 质量评估
+                if np.mean(ious) > 0.8:
+                    self.log("   ✅ 边界框精度: 优秀")
+                elif np.mean(ious) > 0.6:
+                    self.log("   🟡 边界框精度: 良好")
+                else:
+                    self.log("   ⚠️  边界框精度: 需要关注")
+                
+                if np.mean(conf_diffs) < 0.1:
+                    self.log("   ✅ 置信度一致性: 优秀")
+                elif np.mean(conf_diffs) < 0.2:
+                    self.log("   🟡 置信度一致性: 良好")
+                else:
+                    self.log("   ⚠️  置信度一致性: 需要关注")
+            
+            # 分析未匹配的检测
+            if unmatched_pt:
+                self.log(f"   ⚠️  PyTorch 独有检测: {len(unmatched_pt)} 个")
+                for idx in unmatched_pt[:3]:  # 只显示前3个
+                    det = pt_detections[idx]
+                    self.log(f"      - {det['class_name']} (置信度: {det['confidence']:.2f})")
+            
+            if unmatched_cm:
+                self.log(f"   ⚠️  CoreML 独有检测: {len(unmatched_cm)} 个") 
+                for idx in unmatched_cm[:3]:  # 只显示前3个
+                    det = cm_detections[idx]
+                    self.log(f"      - {det['class_name']} (置信度: {det['confidence']:.2f})")
+            
+            # 计算总体精度指标
+            precision = len(matches) / len(cm_detections) if len(cm_detections) > 0 else 0
+            recall = len(matches) / len(pt_detections) if len(pt_detections) > 0 else 0
+            f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+            
+            self.log(f"   精确度: {precision:.3f}, 召回率: {recall:.3f}, F1: {f1:.3f}")
+            
+            # 总体评估
+            if f1 > 0.9 and len(matches) > 0:
+                self.log("   🎯 总体评估: 优秀 - CoreML转换质量很高")
+            elif f1 > 0.7:
+                self.log("   🟡 总体评估: 良好 - CoreML转换质量可接受")
+            elif f1 > 0.5:
+                self.log("   🟠 总体评估: 一般 - 建议检查转换参数")
+            else:
+                self.log("   ❌ 总体评估: 较差 - 存在显著精度损失")
+            
+            # 详细精度分析建议
+            self.log("\n💡 详细精度分析:")
+            self.log("   运行完整测试集精度分析：")
+            pt_model_path = self.project_root / "shared_resources" / "models" / "yolo11n.pt"
+            coreml_model_path = self.output_dir / "yolo11n.mlpackage"
+            self.log(f"   python accuracy_comparison.py --pytorch-model {pt_model_path} --coreml-model {coreml_model_path}")
+            
+        except Exception as e:
+            self.log(f"⚠️  精度对比失败: {e}")
+            self.log("建议使用独立的精度分析工具进行详细对比")
     
     def run_full_conversion(self):
         """运行完整转换流程"""

@@ -11,6 +11,7 @@
 ## 🚀 项目特色
 
 - **完整流程**: 从预训练 PyTorch 模型到 CoreML 部署的完整管道
+- **🎯 精度保障**: 先进的IoU匹配算法和mAP计算，确保转换精度无损失
 - **双平台支持**: Python 和 Swift SDK，支持服务器端和移动端部署
 - **高性能**: 利用 Apple 神经引擎优化的 CoreML 推理
 - **易于使用**: 简洁的 API 设计，丰富的文档和示例
@@ -45,10 +46,12 @@ chmod +x setup_environment.sh
 source venv/bin/activate
 python test_pytorch_model.py
 
-# 第二步：CoreML 模型转换和验证
+# 第二步：CoreML 模型转换和精度验证
 cd ../02_coreml_conversion
 pip install -r requirements.txt
 python convert_and_validate.py
+# 可选：运行详细精度分析
+python accuracy_comparison.py --pytorch-model ../shared_resources/models/yolo11n.pt --coreml-model coreml_models/yolo11n_no_nms.mlpackage
 
 # 第三步：Python SDK 测试
 cd ../03_python_sdk
@@ -109,9 +112,9 @@ for detection in detections {
 
 ### 技术文档
 
-- **[模型转换技术文档](model_conversion/yolo_transfer_coreml.md)** - 详细的转换技术文档
-- **[性能优化指南](shared_resources/docs/performance_guide.md)** - 性能调优建议
-- **[故障排除](shared_resources/docs/troubleshooting.md)** - 常见问题解决方案
+- **[完整项目指南](PROJECT_GUIDE.md)** - 详细的技术实现文档
+- **[精度分析工具](02_coreml_conversion/accuracy_comparison.py)** - 专业的模型精度验证工具
+- **[数据集管理器](02_coreml_conversion/dataset_manager.py)** - 测试数据集自动管理
 
 ## 🎯 使用场景
 
@@ -190,10 +193,12 @@ python -m pytest tests/
 
 ### v1.0.0 (当前版本)
 - ✅ 完整的 PyTorch 到 CoreML 转换流程
+- ✅ **先进的精度对比系统** (IoU匹配 + mAP计算)
 - ✅ Python SDK 与丰富的 API
 - ✅ Swift SDK 支持 iOS/macOS
 - ✅ 完整的测试和文档
 - ✅ 性能基准测试工具
+- ✅ 自动化数据集管理
 
 ### 计划功能
 - 🔄 批量处理工具
